@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Static website on S3 (HTTP website endpoint). Add CloudFront later for HTTPS and custom domains.
+
+Parameters:
+  BucketName:
+    Type: String
+    Default: ''
+    Description: Optional globally unique bucket name. Leave empty to let CloudFormation name the bucket.
+
+Conditions:
+  HasCustomBucketName: !Not [!Equals [!Ref BucketName, '']]
+
+Resources:
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !If [HasCustomBucketName, !Ref BucketName, !Ref 'AWS::NoValue']
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub '${SiteBucket.Arn}/*'
+
+Outputs:
+  BucketName:
+    Description: Name of the S3 bucket (sync files here).
+    Value: !Ref SiteBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketName'
+  WebsiteURL:
+    Description: HTTP URL (S3 website endpoints do not serve HTTPS; use CloudFront for TLS).
+    Value: !Sub 'http://${SiteBucket}.s3-website-${AWS::Region}.amazonaws.com'
+  SyncHint:
+    Description: CLI hint after credentials are configured.
+    Value: !Sub 'aws s3 sync ./ s3://${SiteBucket}/ --exclude ".git/*" --exclude "aws/*"'
